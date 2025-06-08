@@ -5,7 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { User } from "@/pages/Index";
+import { supabase } from "@/integrations/supabase/client";
+import { UserProfile } from "@/pages/Index";
 
 interface Course {
   id: string;
@@ -15,16 +16,17 @@ interface Course {
 
 interface PaymentDialogProps {
   course: Course;
-  user: User;
+  user: UserProfile;
 }
 
 const PaymentDialog = ({ course, user }: PaymentDialogProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [paymentStep, setPaymentStep] = useState<"instructions" | "receipt">("instructions");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
 
-  const handleSubmitReceipt = (e: React.FormEvent) => {
+  const handleSubmitReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!receiptFile) {
       toast({
@@ -35,13 +37,49 @@ const PaymentDialog = ({ course, user }: PaymentDialogProps) => {
       return;
     }
 
-    toast({
-      title: "Payment submitted for verification",
-      description: "Your payment receipt has been submitted. You'll receive access once verified.",
-    });
-    setIsOpen(false);
-    setPaymentStep("instructions");
-    setReceiptFile(null);
+    setIsUploading(true);
+
+    try {
+      // Upload receipt to Supabase Storage
+      const fileExt = receiptFile.name.split('.').pop();
+      const fileName = `${user.id}-${course.id}-${Date.now()}.${fileExt}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('payment-receipts')
+        .upload(fileName, receiptFile);
+
+      if (uploadError) throw uploadError;
+
+      // Create purchase record
+      const { error: purchaseError } = await supabase
+        .from('purchases')
+        .insert({
+          user_id: user.id,
+          course_id: course.id,
+          amount: course.price,
+          receipt_url: uploadData.path,
+        });
+
+      if (purchaseError) throw purchaseError;
+
+      toast({
+        title: "Payment submitted for verification",
+        description: "Your payment receipt has been submitted. You'll receive access once verified.",
+      });
+      
+      setIsOpen(false);
+      setPaymentStep("instructions");
+      setReceiptFile(null);
+    } catch (error) {
+      console.error('Error submitting payment:', error);
+      toast({
+        title: "Error",
+        description: "Failed to submit payment receipt. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -64,7 +102,7 @@ const PaymentDialog = ({ course, user }: PaymentDialogProps) => {
               <div className="space-y-2 text-sm">
                 <p><strong>Amount:</strong> {course.price} ETB</p>
                 <p><strong>Send to:</strong> +251 91 123 4567 (Telebirr)</p>
-                <p><strong>Reference:</strong> COURSE-{course.id}</p>
+                <p><strong>Reference:</strong> COURSE-{course.id.slice(0, 8)}</p>
               </div>
             </div>
             
@@ -111,11 +149,12 @@ const PaymentDialog = ({ course, user }: PaymentDialogProps) => {
                 variant="outline" 
                 onClick={() => setPaymentStep("instructions")}
                 className="flex-1"
+                disabled={isUploading}
               >
                 Back
               </Button>
-              <Button type="submit" className="flex-1">
-                Submit Receipt
+              <Button type="submit" className="flex-1" disabled={isUploading}>
+                {isUploading ? "Submitting..." : "Submit Receipt"}
               </Button>
             </div>
           </form>

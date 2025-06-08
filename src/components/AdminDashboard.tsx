@@ -1,351 +1,484 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { User as UserIcon, Book, Briefcase, CreditCard, Shield, Trash2, CheckCircle, XCircle } from "lucide-react";
-import { User } from "@/pages/Index";
+import { supabase } from "@/integrations/supabase/client";
+import { UserProfile } from "@/pages/Index";
+import { Users, BookOpen, Briefcase, Receipt, CheckCircle, XCircle, Eye } from "lucide-react";
 
 interface AdminDashboardProps {
-  user: User;
+  user: UserProfile;
   onBack: () => void;
 }
 
-interface PaymentVerification {
-  id: string;
-  userId: string;
-  userName: string;
-  courseTitle: string;
-  amount: number;
-  submittedDate: string;
-  receiptUrl: string;
-  status: "pending" | "approved" | "rejected";
+interface DashboardStats {
+  totalUsers: number;
+  totalCourses: number;
+  totalJobs: number;
+  pendingPurchases: number;
+  usersByRole: Record<string, number>;
 }
 
-const mockUsers = [
-  { id: "1", name: "Almaz Tadesse", email: "almaz@example.com", type: "instructor", status: "active", joinDate: "2024-01-15" },
-  { id: "2", name: "Dawit Mekonnen", email: "dawit@example.com", type: "normal", status: "active", joinDate: "2024-01-14" },
-  { id: "3", name: "Tigist Haile", email: "tigist@example.com", type: "instructor", status: "blocked", joinDate: "2024-01-13" },
-  { id: "4", name: "Samuel Bekele", email: "samuel@example.com", type: "employer", status: "active", joinDate: "2024-01-12" },
-];
-
-const mockPayments: PaymentVerification[] = [
-  {
-    id: "1",
-    userId: "2",
-    userName: "Dawit Mekonnen",
-    courseTitle: "Traditional Ethiopian Cooking",
-    amount: 750,
-    submittedDate: "2024-01-16",
-    receiptUrl: "/placeholder-receipt.jpg",
-    status: "pending"
-  },
-  {
-    id: "2",
-    userId: "4",
-    userName: "Samuel Bekele",
-    courseTitle: "Digital Marketing for Small Business",
-    amount: 1200,
-    submittedDate: "2024-01-15",
-    receiptUrl: "/placeholder-receipt.jpg",
-    status: "pending"
-  },
-];
-
 const AdminDashboard = ({ user, onBack }: AdminDashboardProps) => {
-  const [activeTab, setActiveTab] = useState("overview");
-  const [payments, setPayments] = useState(mockPayments);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalUsers: 0,
+    totalCourses: 0,
+    totalJobs: 0,
+    pendingPurchases: 0,
+    usersByRole: {},
+  });
+  const [users, setUsers] = useState<any[]>([]);
+  const [purchases, setPurchases] = useState<any[]>([]);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  if (user.type !== "admin") {
+  useEffect(() => {
+    if (user.role === 'admin') {
+      fetchAdminData();
+    }
+  }, [user.role]);
+
+  const fetchAdminData = async () => {
+    try {
+      // Fetch users
+      const { data: usersData } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      // Fetch purchases
+      const { data: purchasesData } = await supabase
+        .from('purchases')
+        .select(`
+          *,
+          profiles:user_id (full_name, email),
+          courses:course_id (title)
+        `)
+        .order('created_at', { ascending: false });
+
+      // Fetch courses
+      const { data: coursesData } = await supabase
+        .from('courses')
+        .select(`
+          *,
+          profiles:instructor_id (full_name)
+        `)
+        .order('created_at', { ascending: false });
+
+      // Fetch jobs
+      const { data: jobsData } = await supabase
+        .from('jobs')
+        .select(`
+          *,
+          profiles:posted_by (full_name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (usersData) setUsers(usersData);
+      if (purchasesData) setPurchases(purchasesData);
+      if (coursesData) setCourses(coursesData);
+      if (jobsData) setJobs(jobsData);
+
+      // Calculate stats
+      const usersByRole = usersData?.reduce((acc: Record<string, number>, user) => {
+        acc[user.role] = (acc[user.role] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      setStats({
+        totalUsers: usersData?.length || 0,
+        totalCourses: coursesData?.length || 0,
+        totalJobs: jobsData?.length || 0,
+        pendingPurchases: purchasesData?.filter(p => !p.is_verified).length || 0,
+        usersByRole,
+      });
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch admin data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyPurchase = async (purchaseId: string, verified: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('purchases')
+        .update({
+          is_verified: verified,
+          verified_by: user.id,
+          verified_at: new Date().toISOString(),
+        })
+        .eq('id', purchaseId);
+
+      if (error) throw error;
+
+      toast({
+        title: verified ? "Purchase verified" : "Purchase rejected",
+        description: `Payment has been ${verified ? 'approved' : 'rejected'}.`,
+      });
+
+      fetchAdminData();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update purchase status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleToggleUserStatus = async (userId: string, currentRole: string) => {
+    // For demo purposes, we'll just show the action
+    toast({
+      title: "User status updated",
+      description: `User role management would be implemented here.`,
+    });
+  };
+
+  const handleToggleCourseStatus = async (courseId: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('courses')
+        .update({ is_active: !isActive })
+        .eq('id', courseId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Course updated",
+        description: `Course has been ${!isActive ? 'activated' : 'deactivated'}.`,
+      });
+
+      fetchAdminData();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update course status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleToggleJobStatus = async (jobId: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('jobs')
+        .update({ is_active: !isActive })
+        .eq('id', jobId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Job updated",
+        description: `Job has been ${!isActive ? 'activated' : 'deactivated'}.`,
+      });
+
+      fetchAdminData();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update job status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (user.role !== 'admin') {
     return (
       <div className="text-center py-8">
-        <p className="text-red-500">Access denied. Admin privileges required.</p>
-        <Button onClick={onBack} className="mt-4">Back to Dashboard</Button>
+        <h2 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h2>
+        <p className="text-muted-foreground">You don't have permission to access this page.</p>
+        <Button onClick={onBack} className="mt-4">Go Back</Button>
       </div>
     );
   }
 
-  const handlePaymentVerification = (paymentId: string, status: "approved" | "rejected") => {
-    setPayments(prev => prev.map(payment => 
-      payment.id === paymentId ? { ...payment, status } : payment
-    ));
-    
-    toast({
-      title: `Payment ${status}`,
-      description: `Payment verification has been ${status}.`,
-    });
-  };
-
-  const handleUserAction = (userId: string, action: "block" | "delete") => {
-    toast({
-      title: `User ${action}ed`,
-      description: `User has been ${action}ed successfully.`,
-    });
-  };
-
-  const pendingPayments = payments.filter(p => p.status === "pending");
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <div className="text-xl">Loading admin dashboard...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold">Admin Dashboard</h2>
-          <p className="text-muted-foreground">Manage users, courses, and payments</p>
+          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+          <p className="text-muted-foreground">Manage users, courses, jobs, and payments</p>
         </div>
-        <Button onClick={onBack} variant="outline">
+        <Button variant="outline" onClick={onBack}>
           ← Back to Dashboard
         </Button>
       </div>
 
-      {/* Overview Stats */}
+      {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-2">
-              <UserIcon className="h-8 w-8 text-blue-600" />
-              <div>
-                <div className="text-2xl font-bold">1,247</div>
-                <div className="text-sm text-muted-foreground">Total Users</div>
-              </div>
+          <CardContent className="flex items-center p-6">
+            <Users className="h-8 w-8 text-blue-600 mr-3" />
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Total Users</p>
+              <p className="text-2xl font-bold">{stats.totalUsers}</p>
             </div>
           </CardContent>
         </Card>
+        
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-2">
-              <Book className="h-8 w-8 text-green-600" />
-              <div>
-                <div className="text-2xl font-bold">156</div>
-                <div className="text-sm text-muted-foreground">Active Courses</div>
-              </div>
+          <CardContent className="flex items-center p-6">
+            <BookOpen className="h-8 w-8 text-green-600 mr-3" />
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Total Courses</p>
+              <p className="text-2xl font-bold">{stats.totalCourses}</p>
             </div>
           </CardContent>
         </Card>
+        
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-2">
-              <Briefcase className="h-8 w-8 text-purple-600" />
-              <div>
-                <div className="text-2xl font-bold">89</div>
-                <div className="text-sm text-muted-foreground">Active Jobs</div>
-              </div>
+          <CardContent className="flex items-center p-6">
+            <Briefcase className="h-8 w-8 text-purple-600 mr-3" />
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Total Jobs</p>
+              <p className="text-2xl font-bold">{stats.totalJobs}</p>
             </div>
           </CardContent>
         </Card>
+        
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-2">
-              <CreditCard className="h-8 w-8 text-yellow-600" />
-              <div>
-                <div className="text-2xl font-bold">{pendingPayments.length}</div>
-                <div className="text-sm text-muted-foreground">Pending Payments</div>
-              </div>
+          <CardContent className="flex items-center p-6">
+            <Receipt className="h-8 w-8 text-orange-600 mr-3" />
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Pending Payments</p>
+              <p className="text-2xl font-bold">{stats.pendingPurchases}</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Admin Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="content">Content</TabsTrigger>
+      {/* Main Content Tabs */}
+      <Tabs defaultValue="purchases" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="purchases">Payment Verification</TabsTrigger>
+          <TabsTrigger value="users">User Management</TabsTrigger>
+          <TabsTrigger value="courses">Course Management</TabsTrigger>
+          <TabsTrigger value="jobs">Job Management</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-sm">New user registered: Meron Assefa</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span className="text-sm">Course uploaded: Financial Planning</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                  <span className="text-sm">Payment verification needed</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>System Health</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Server Status</span>
-                    <Badge className="bg-green-100 text-green-800">Online</Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Database</span>
-                    <Badge className="bg-green-100 text-green-800">Healthy</Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Storage</span>
-                    <Badge className="bg-yellow-100 text-yellow-800">85% Used</Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="users" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>User Management</CardTitle>
-              <CardDescription>Manage platform users and their permissions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {mockUsers.map(user => (
-                  <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="space-y-1">
-                      <div className="font-medium">{user.name}</div>
-                      <div className="text-sm text-muted-foreground">{user.email}</div>
-                      <div className="flex items-center space-x-2">
-                        <Badge variant="outline">{user.type}</Badge>
-                        <Badge className={user.status === "active" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
-                          {user.status}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleUserAction(user.id, "block")}
-                      >
-                        <Shield className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleUserAction(user.id, "delete")}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="payments" className="space-y-4">
+        {/* Payment Verification */}
+        <TabsContent value="purchases">
           <Card>
             <CardHeader>
               <CardTitle>Payment Verification</CardTitle>
-              <CardDescription>Review and approve payment receipts</CardDescription>
+              <CardDescription>Review and verify course payment receipts</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {payments.map(payment => (
-                  <div key={payment.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="space-y-1">
-                      <div className="font-medium">{payment.courseTitle}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {payment.userName} • {payment.amount} ETB
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Submitted: {payment.submittedDate}
-                      </div>
-                      <Badge className={
-                        payment.status === "pending" ? "bg-yellow-100 text-yellow-800" :
-                        payment.status === "approved" ? "bg-green-100 text-green-800" :
-                        "bg-red-100 text-red-800"
-                      }>
-                        {payment.status}
-                      </Badge>
-                    </div>
-                    {payment.status === "pending" && (
-                      <div className="flex space-x-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handlePaymentVerification(payment.id, "approved")}
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Approve
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User</TableHead>
+                    <TableHead>Course</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {purchases.map((purchase) => (
+                    <TableRow key={purchase.id}>
+                      <TableCell>{purchase.profiles?.full_name}</TableCell>
+                      <TableCell>{purchase.courses?.title}</TableCell>
+                      <TableCell>{purchase.amount} ETB</TableCell>
+                      <TableCell>
+                        <Badge variant={purchase.is_verified ? "default" : "secondary"}>
+                          {purchase.is_verified ? "Verified" : "Pending"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{new Date(purchase.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        {!purchase.is_verified && (
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleVerifyPurchase(purchase.id, true)}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Verify
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleVerifyPurchase(purchase.id, false)}
+                            >
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Reject
+                            </Button>
+                          </div>
+                        )}
+                        <Button size="sm" variant="outline" className="ml-2">
+                          <Eye className="h-4 w-4 mr-1" />
+                          View Receipt
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handlePaymentVerification(payment.id, "rejected")}
-                        >
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Reject
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="content" className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Course Management</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Published Courses</span>
-                    <span className="font-semibold">156</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Pending Review</span>
-                    <span className="font-semibold">12</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Total Enrollments</span>
-                    <span className="font-semibold">3,247</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        {/* User Management */}
+        <TabsContent value="users">
+          <Card>
+            <CardHeader>
+              <CardTitle>User Management</CardTitle>
+              <CardDescription>Manage user accounts and roles</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Joined</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((userItem) => (
+                    <TableRow key={userItem.id}>
+                      <TableCell>{userItem.full_name}</TableCell>
+                      <TableCell>{userItem.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{userItem.role}</Badge>
+                      </TableCell>
+                      <TableCell>{new Date(userItem.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleToggleUserStatus(userItem.id, userItem.role)}
+                        >
+                          Manage
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Job Management</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Active Jobs</span>
-                    <span className="font-semibold">89</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Applications Today</span>
-                    <span className="font-semibold">47</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Total Applications</span>
-                    <span className="font-semibold">1,856</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        {/* Course Management */}
+        <TabsContent value="courses">
+          <Card>
+            <CardHeader>
+              <CardTitle>Course Management</CardTitle>
+              <CardDescription>Manage all courses on the platform</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Instructor</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {courses.map((course) => (
+                    <TableRow key={course.id}>
+                      <TableCell>{course.title}</TableCell>
+                      <TableCell>{course.profiles?.full_name}</TableCell>
+                      <TableCell>{course.category}</TableCell>
+                      <TableCell>{course.price} ETB</TableCell>
+                      <TableCell>
+                        <Badge variant={course.is_active ? "default" : "secondary"}>
+                          {course.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleToggleCourseStatus(course.id, course.is_active)}
+                        >
+                          {course.is_active ? "Deactivate" : "Activate"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Job Management */}
+        <TabsContent value="jobs">
+          <Card>
+            <CardHeader>
+              <CardTitle>Job Management</CardTitle>
+              <CardDescription>Manage all job postings on the platform</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Posted By</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {jobs.map((job) => (
+                    <TableRow key={job.id}>
+                      <TableCell>{job.title}</TableCell>
+                      <TableCell>{job.company_name}</TableCell>
+                      <TableCell>{job.profiles?.full_name}</TableCell>
+                      <TableCell>{job.location}</TableCell>
+                      <TableCell>
+                        <Badge variant={job.is_active ? "default" : "secondary"}>
+                          {job.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleToggleJobStatus(job.id, job.is_active)}
+                        >
+                          {job.is_active ? "Deactivate" : "Activate"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

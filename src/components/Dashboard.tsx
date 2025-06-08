@@ -4,13 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { User } from "lucide-react";
-import { User as UserType } from "@/pages/Index";
+import { UserProfile } from "@/pages/Index";
 import CoursesPage from "./CoursesPage";
 import JobsPage from "./JobsPage";
 import AdminDashboard from "./AdminDashboard";
 
 interface DashboardProps {
-  user: UserType;
+  user: UserProfile;
   onLogout: () => void;
 }
 
@@ -60,12 +60,12 @@ const Dashboard = ({ user, onLogout }: DashboardProps) => {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <User className="h-5 w-5" />
-              <span className="font-medium">{user.name}</span>
-              <Badge className={getUserTypeColor(user.type)}>
-                {user.type.charAt(0).toUpperCase() + user.type.slice(1)}
+              <span className="font-medium">{user.full_name}</span>
+              <Badge className={getUserTypeColor(user.role)}>
+                {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
               </Badge>
             </div>
-            {user.type === "admin" && (
+            {user.role === "admin" && (
               <Button variant="outline" onClick={() => setActivePage("admin")}>
                 Admin Panel
               </Button>
@@ -86,7 +86,7 @@ const Dashboard = ({ user, onLogout }: DashboardProps) => {
 };
 
 interface WelcomePageProps {
-  user: UserType;
+  user: UserProfile;
   setActivePage: (page: ActivePage) => void;
 }
 
@@ -96,7 +96,7 @@ const WelcomePage = ({ user, setActivePage }: WelcomePageProps) => {
       {/* Welcome Message */}
       <div className="text-center space-y-4">
         <h2 className="text-4xl font-bold text-foreground">
-          Welcome back, {user.name}! 👋
+          Welcome back, {user.full_name}! 👋
         </h2>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
           Ready to explore new opportunities? Choose what you'd like to do today.
@@ -124,7 +124,7 @@ const WelcomePage = ({ user, setActivePage }: WelcomePageProps) => {
               <Button variant="outline" className="justify-start">
                 📖 My Courses
               </Button>
-              {user.type === "instructor" && (
+              {user.role === "instructor" && (
                 <Button variant="outline" className="justify-start">
                   ➕ Add Course
                 </Button>
@@ -157,7 +157,7 @@ const WelcomePage = ({ user, setActivePage }: WelcomePageProps) => {
               <Button variant="outline" className="justify-start">
                 📋 Applied Jobs
               </Button>
-              {user.type === "employer" && (
+              {user.role === "employer" && (
                 <Button variant="outline" className="justify-start">
                   ➕ Post a Job
                 </Button>

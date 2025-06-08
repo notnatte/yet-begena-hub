@@ -7,42 +7,89 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { User, UserType } from "@/pages/Index";
+import { supabase } from "@/integrations/supabase/client";
+import { UserType } from "@/pages/Index";
 
-interface AuthFormProps {
-  onLogin: (user: User) => void;
-}
-
-const AuthForm = ({ onLogin }: AuthFormProps) => {
+const AuthForm = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
+    fullName: "",
     email: "",
     password: "",
     userType: "normal" as UserType,
   });
   const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent, mode: "login" | "signup") => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      const user: User = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: formData.name || formData.email.split("@")[0],
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
         email: formData.email,
-        type: formData.userType,
-      };
-
-      onLogin(user);
-      toast({
-        title: `${mode === "login" ? "Welcome back" : "Account created"}!`,
-        description: `Successfully ${mode === "login" ? "logged in" : "signed up"} as ${formData.userType}.`,
+        password: formData.password,
       });
+
+      if (error) {
+        toast({
+          title: "Login failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Welcome back!",
+          description: "Successfully logged in.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
+  };
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            full_name: formData.fullName,
+            role: formData.userType,
+          },
+        },
+      });
+
+      if (error) {
+        toast({
+          title: "Signup failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Account created!",
+          description: "Please check your email to verify your account.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -90,7 +137,7 @@ const AuthForm = ({ onLogin }: AuthFormProps) => {
               </TabsList>
               
               <TabsContent value="login">
-                <form onSubmit={(e) => handleSubmit(e, "login")} className="space-y-4">
+                <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
                     <Input
@@ -119,15 +166,15 @@ const AuthForm = ({ onLogin }: AuthFormProps) => {
               </TabsContent>
               
               <TabsContent value="signup">
-                <form onSubmit={(e) => handleSubmit(e, "signup")} className="space-y-4">
+                <form onSubmit={handleSignup} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
+                    <Label htmlFor="fullName">Full Name</Label>
                     <Input
-                      id="name"
+                      id="fullName"
                       type="text"
                       placeholder="Your full name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      value={formData.fullName}
+                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                       required
                     />
                   </div>
