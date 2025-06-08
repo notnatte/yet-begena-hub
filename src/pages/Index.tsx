@@ -20,6 +20,37 @@ const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  const fetchUserProfile = async (userId: string) => {
+    setProfileLoading(true);
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return;
+      }
+
+      if (profile) {
+        const userProfile: UserProfile = {
+          id: profile.id,
+          full_name: profile.full_name,
+          email: profile.email,
+          role: profile.role as UserType
+        };
+        setUserProfile(userProfile);
+      }
+    } catch (error) {
+      console.error('Error in fetchUserProfile:', error);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
 
   useEffect(() => {
     // Set up auth state listener
@@ -30,25 +61,8 @@ const Index = () => {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          // Fetch user profile
-          setTimeout(async () => {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
-            
-            if (profile) {
-              // Ensure role is properly typed
-              const userProfile: UserProfile = {
-                id: profile.id,
-                full_name: profile.full_name,
-                email: profile.email,
-                role: profile.role as UserType
-              };
-              setUserProfile(userProfile);
-            }
-          }, 0);
+          // Fetch user profile immediately when session is available
+          await fetchUserProfile(session.user.id);
         } else {
           setUserProfile(null);
         }
@@ -57,12 +71,19 @@ const Index = () => {
     );
 
     // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       console.log('Initial session:', session);
-      setSession(session);
-      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        setSession(session);
+        setUser(session.user);
+        await fetchUserProfile(session.user.id);
+      }
       setLoading(false);
-    });
+    };
+
+    checkSession();
 
     return () => subscription.unsubscribe();
   }, []);
@@ -71,7 +92,7 @@ const Index = () => {
     await supabase.auth.signOut();
   };
 
-  if (loading) {
+  if (loading || (session && profileLoading)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-green-50 to-yellow-50 flex items-center justify-center">
         <div className="text-xl">Loading...</div>
