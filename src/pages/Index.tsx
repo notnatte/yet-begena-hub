@@ -1,12 +1,37 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import { useState } from "react";
+import { Toaster } from "@/components/ui/toaster";
+import AuthForm from "@/components/AuthForm";
+import Dashboard from "@/components/Dashboard";
+
+export type UserType = "normal" | "instructor" | "employer" | "admin";
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  type: UserType;
+}
 
 const Index = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  const handleLogin = (userData: User) => {
+    setCurrentUser(userData);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-green-50 to-yellow-50">
+      <Toaster />
+      {!currentUser ? (
+        <AuthForm onLogin={handleLogin} />
+      ) : (
+        <Dashboard user={currentUser} onLogout={handleLogout} />
+      )}
     </div>
   );
 };
