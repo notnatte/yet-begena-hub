@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Book, Calendar, User as UserIcon } from "lucide-react";
-import { User } from "@/pages/Index";
+import { UserProfile } from "@/pages/Index";
 import PaymentDialog from "./PaymentDialog";
 
 interface Course {
@@ -27,7 +26,7 @@ interface Course {
 }
 
 interface CoursesPageProps {
-  user: User;
+  user: UserProfile;
   onBack: () => void;
 }
 
@@ -162,7 +161,7 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
         >
           My Courses
         </Button>
-        {user.type === "instructor" && (
+        {user.role === "instructor" && (
           <Button
             variant={activeTab === "add-course" ? "default" : "ghost"}
             onClick={() => setActiveTab("add-course")}
@@ -243,7 +242,7 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
         </div>
       )}
 
-      {activeTab === "add-course" && user.type === "instructor" && (
+      {activeTab === "add-course" && user.role === "instructor" && (
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -322,7 +321,7 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
 
 interface CourseCardProps {
   course: Course;
-  user: User;
+  user: UserProfile;
 }
 
 const CourseCard = ({ course, user }: CourseCardProps) => {

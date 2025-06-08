@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Search, MapPin, Clock, Building } from "lucide-react";
-import { User } from "@/pages/Index";
+import { UserProfile } from "@/pages/Index";
 
 interface Job {
   id: string;
@@ -27,7 +26,7 @@ interface Job {
 }
 
 interface JobsPageProps {
-  user: User;
+  user: UserProfile;
   onBack: () => void;
 }
 
@@ -175,7 +174,7 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
         >
           Applied Jobs
         </Button>
-        {user.type === "employer" && (
+        {user.role === "employer" && (
           <Button
             variant={activeTab === "post-job" ? "default" : "ghost"}
             onClick={() => setActiveTab("post-job")}
@@ -256,7 +255,7 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
         </div>
       )}
 
-      {activeTab === "post-job" && user.type === "employer" && (
+      {activeTab === "post-job" && user.role === "employer" && (
         <div className="space-y-6">
           <Card>
             <CardHeader>

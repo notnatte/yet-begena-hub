@@ -39,7 +39,14 @@ const Index = () => {
               .single();
             
             if (profile) {
-              setUserProfile(profile);
+              // Ensure role is properly typed
+              const userProfile: UserProfile = {
+                id: profile.id,
+                full_name: profile.full_name,
+                email: profile.email,
+                role: profile.role as UserType
+              };
+              setUserProfile(userProfile);
             }
           }, 0);
         } else {
