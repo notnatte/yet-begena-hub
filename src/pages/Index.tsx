@@ -13,6 +13,7 @@ export interface UserProfile {
   full_name: string;
   email: string;
   role: UserType;
+  cv_url?: string;
 }
 
 const Index = () => {
@@ -29,7 +30,8 @@ const Index = () => {
         id: userId,
         full_name: userData.full_name || userData.email?.split('@')[0] || 'User',
         email: userData.email,
-        role: (userData.role as UserType) || 'normal'
+        role: (userData.role as UserType) || 'normal',
+        cv_url: undefined
       };
 
       const { error } = await supabase
@@ -51,7 +53,8 @@ const Index = () => {
         id: userId,
         full_name: userData.full_name || userData.email?.split('@')[0] || 'User',
         email: userData.email,
-        role: (userData.role as UserType) || 'normal'
+        role: (userData.role as UserType) || 'normal',
+        cv_url: undefined
       };
       setUserProfile(fallbackProfile);
     }
@@ -78,7 +81,8 @@ const Index = () => {
           id: profile.id,
           full_name: profile.full_name,
           email: profile.email,
-          role: profile.role as UserType
+          role: profile.role as UserType,
+          cv_url: profile.cv_url || undefined
         };
         setUserProfile(userProfile);
       } else {
