@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,21 +8,22 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Search, MapPin, Clock, Building } from "lucide-react";
+import { Search, MapPin, Clock, Building, FileText } from "lucide-react";
 import { UserProfile } from "@/pages/Index";
+import { supabase } from "@/integrations/supabase/client";
+import CVUpload from "./CVUpload";
 
 interface Job {
   id: string;
   title: string;
-  company: string;
-  location: string;
-  type: string;
-  salary: string;
+  company_name: string | null;
+  location: string | null;
+  job_type: string | null;
+  salary_range: string | null;
   description: string;
-  requirements: string[];
-  category: string;
-  postedDate: string;
-  deadline: string;
+  requirements: string | null;
+  created_at: string;
+  is_active: boolean;
 }
 
 interface JobsPageProps {
@@ -30,122 +31,187 @@ interface JobsPageProps {
   onBack: () => void;
 }
 
-const mockJobs: Job[] = [
-  {
-    id: "1",
-    title: "Junior Software Developer",
-    company: "Tech Solutions Ethiopia",
-    location: "Addis Ababa",
-    type: "Full-time",
-    salary: "15,000 - 25,000 ETB",
-    description: "We are looking for a passionate Junior Software Developer to join our growing team. You will work on exciting projects and gain valuable experience in modern web technologies.",
-    requirements: ["Bachelor's degree in Computer Science or related field", "Knowledge of JavaScript, React, or similar frameworks", "Strong problem-solving skills", "Good communication skills"],
-    category: "Technology",
-    postedDate: "2024-01-15",
-    deadline: "2024-02-15"
-  },
-  {
-    id: "2",
-    title: "Marketing Coordinator",
-    company: "Green Coffee Exports",
-    location: "Jimma",
-    type: "Full-time",
-    salary: "12,000 - 18,000 ETB",
-    description: "Join our marketing team to promote Ethiopian coffee internationally. This role involves digital marketing, content creation, and relationship building with international clients.",
-    requirements: ["Degree in Marketing, Business, or related field", "Experience with social media marketing", "Excellent English communication skills", "Creative thinking and analytical skills"],
-    category: "Marketing",
-    postedDate: "2024-01-14",
-    deadline: "2024-02-10"
-  },
-  {
-    id: "3",
-    title: "Traditional Craft Instructor",
-    company: "Cultural Heritage Center",
-    location: "Bahir Dar",
-    type: "Part-time",
-    salary: "8,000 - 12,000 ETB",
-    description: "Teach traditional Ethiopian crafts including weaving, pottery, and basketry to local and international students. Share your cultural knowledge and preserve traditional skills.",
-    requirements: ["Expertise in traditional Ethiopian crafts", "Teaching or training experience preferred", "Passion for cultural preservation", "Ability to work with diverse groups"],
-    category: "Education",
-    postedDate: "2024-01-13",
-    deadline: "2024-02-05"
-  },
-  {
-    id: "4",
-    title: "Agricultural Extension Agent",
-    company: "Ministry of Agriculture",
-    location: "Hawassa",
-    type: "Full-time",
-    salary: "10,000 - 15,000 ETB",
-    description: "Work directly with farmers to improve agricultural practices, introduce new technologies, and increase crop yields. Help implement sustainable farming methods.",
-    requirements: ["Degree in Agriculture or related field", "Experience working with rural communities", "Knowledge of sustainable farming practices", "Valid driver's license"],
-    category: "Agriculture",
-    postedDate: "2024-01-12",
-    deadline: "2024-02-12"
-  },
-  {
-    id: "5",
-    title: "Customer Service Representative",
-    company: "Ethiopian Airlines",
-    location: "Addis Ababa",
-    type: "Full-time",
-    salary: "8,000 - 13,000 ETB",
-    description: "Provide excellent customer service to airline passengers. Handle reservations, check-ins, and resolve customer inquiries with professionalism and efficiency.",
-    requirements: ["High school diploma or equivalent", "Excellent communication skills in English and Amharic", "Customer service experience preferred", "Professional appearance and demeanor"],
-    category: "Customer Service",
-    postedDate: "2024-01-11",
-    deadline: "2024-02-08"
-  },
-  {
-    id: "6",
-    title: "Financial Analyst",
-    company: "Development Bank of Ethiopia",
-    location: "Addis Ababa",
-    type: "Full-time",
-    salary: "20,000 - 30,000 ETB",
-    description: "Analyze financial data, prepare reports, and support decision-making processes. Work with various departments to assess project viability and financial performance.",
-    requirements: ["Degree in Finance, Economics, or Accounting", "2+ years of financial analysis experience", "Proficiency in Excel and financial software", "Strong analytical and presentation skills"],
-    category: "Finance",
-    postedDate: "2024-01-10",
-    deadline: "2024-02-07"
-  }
-];
-
 const JobsPage = ({ user, onBack }: JobsPageProps) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedLocation, setSelectedLocation] = useState("all");
   const [activeTab, setActiveTab] = useState<"browse" | "applied" | "post-job">("browse");
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [applications, setApplications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isPostJobOpen, setIsPostJobOpen] = useState(false);
+  const [showCVUpload, setShowCVUpload] = useState(false);
+  const [pendingJobId, setPendingJobId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const categories = ["all", "Technology", "Marketing", "Education", "Agriculture", "Customer Service", "Finance"];
   const locations = ["all", "Addis Ababa", "Jimma", "Bahir Dar", "Hawassa", "Dire Dawa", "Mekelle"];
 
-  const filteredJobs = mockJobs.filter(job => {
+  const fetchJobs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setJobs(data || []);
+    } catch (error) {
+      console.error('Error fetching jobs:', error);
+      toast({
+        title: "Error loading jobs",
+        description: "Could not load job listings. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchApplications = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('job_applications')
+        .select(`
+          *,
+          jobs (
+            title,
+            company_name
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setApplications(data || []);
+    } catch (error) {
+      console.error('Error fetching applications:', error);
+    }
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([fetchJobs(), fetchApplications()]);
+      setLoading(false);
+    };
+    loadData();
+  }, [user.id]);
+
+  const filteredJobs = jobs.filter(job => {
     const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         job.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         job.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          job.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === "all" || job.category === selectedCategory;
     const matchesLocation = selectedLocation === "all" || job.location === selectedLocation;
-    return matchesSearch && matchesCategory && matchesLocation;
+    return matchesSearch && matchesLocation;
   });
 
-  const handlePostJob = (e: React.FormEvent) => {
+  const handlePostJob = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: "Job posted successfully",
-      description: "Your job posting is now live and visible to job seekers.",
-    });
-    setIsPostJobOpen(false);
+    const formData = new FormData(e.target as HTMLFormElement);
+    
+    try {
+      const { error } = await supabase
+        .from('jobs')
+        .insert({
+          title: formData.get('job-title') as string,
+          company_name: formData.get('company') as string,
+          location: formData.get('location') as string,
+          job_type: formData.get('job-type') as string,
+          salary_range: formData.get('salary') as string,
+          description: formData.get('description') as string,
+          requirements: formData.get('requirements') as string,
+          posted_by: user.id,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Job posted successfully",
+        description: "Your job posting is now live and visible to job seekers.",
+      });
+      
+      setIsPostJobOpen(false);
+      fetchJobs(); // Refresh the jobs list
+      (e.target as HTMLFormElement).reset();
+    } catch (error) {
+      console.error('Error posting job:', error);
+      toast({
+        title: "Error posting job",
+        description: "Could not post the job. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleApplyJob = (jobId: string) => {
-    toast({
-      title: "Application submitted",
-      description: "Your job application has been sent to the employer.",
-    });
+  const handleApplyJob = async (jobId: string) => {
+    // Check if user has a CV
+    if (!user.cv_url) {
+      setPendingJobId(jobId);
+      setShowCVUpload(true);
+      return;
+    }
+
+    // Check if already applied
+    const existingApplication = applications.find(app => app.job_id === jobId);
+    if (existingApplication) {
+      toast({
+        title: "Already applied",
+        description: "You have already applied for this job.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('job_applications')
+        .insert({
+          job_id: jobId,
+          user_id: user.id,
+          resume_url: user.cv_url,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Application submitted",
+        description: "Your job application has been sent to the employer.",
+      });
+
+      fetchApplications(); // Refresh applications
+    } catch (error) {
+      console.error('Error applying for job:', error);
+      toast({
+        title: "Application failed",
+        description: "Could not submit your application. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
+
+  const handleCVUploaded = async (cvUrl: string) => {
+    // Update local user state
+    user.cv_url = cvUrl;
+    
+    // If there was a pending job application, proceed with it
+    if (pendingJobId) {
+      setShowCVUpload(false);
+      await handleApplyJob(pendingJobId);
+      setPendingJobId(null);
+    } else {
+      setShowCVUpload(false);
+      toast({
+        title: "CV updated",
+        description: "Your CV has been updated successfully.",
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="text-center py-8">Loading jobs...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -172,7 +238,7 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
           variant={activeTab === "applied" ? "default" : "ghost"}
           onClick={() => setActiveTab("applied")}
         >
-          Applied Jobs
+          Applied Jobs ({applications.length})
         </Button>
         {user.role === "employer" && (
           <Button
@@ -184,13 +250,46 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
         )}
       </div>
 
+      {/* CV Upload Dialog */}
+      <Dialog open={showCVUpload} onOpenChange={setShowCVUpload}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload Your CV</DialogTitle>
+            <DialogDescription>
+              You need to upload your CV before applying for jobs. It will be automatically attached to your applications.
+            </DialogDescription>
+          </DialogHeader>
+          <CVUpload user={user} onCVUploaded={handleCVUploaded} />
+        </DialogContent>
+      </Dialog>
+
       {/* Content based on active tab */}
       {activeTab === "browse" && (
         <div className="space-y-6">
+          {/* CV Status Alert */}
+          {!user.cv_url && (
+            <Card className="border-orange-200 bg-orange-50">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <FileText className="h-5 w-5 text-orange-600" />
+                    <div>
+                      <p className="font-medium text-orange-800">No CV uploaded</p>
+                      <p className="text-sm text-orange-600">Upload your CV to apply for jobs</p>
+                    </div>
+                  </div>
+                  <Button onClick={() => setShowCVUpload(true)} variant="outline">
+                    Upload CV
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Search and Filters */}
           <Card>
             <CardContent className="pt-6">
-              <div className="grid md:grid-cols-4 gap-4">
+              <div className="grid md:grid-cols-3 gap-4">
                 <div className="md:col-span-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -202,18 +301,6 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
                     />
                   </div>
                 </div>
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(category => (
-                      <SelectItem key={category} value={category}>
-                        {category === "all" ? "All Categories" : category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <Select value={selectedLocation} onValueChange={setSelectedLocation}>
                   <SelectTrigger>
                     <SelectValue placeholder="Location" />
@@ -232,9 +319,23 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
 
           {/* Job Listings */}
           <div className="space-y-4">
-            {filteredJobs.map(job => (
-              <JobCard key={job.id} job={job} onApply={handleApplyJob} />
-            ))}
+            {filteredJobs.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No jobs found. {user.role === "employer" && "Be the first to post a job!"}
+                </CardContent>
+              </Card>
+            ) : (
+              filteredJobs.map(job => (
+                <JobCard 
+                  key={job.id} 
+                  job={job} 
+                  onApply={handleApplyJob}
+                  hasApplied={applications.some(app => app.job_id === job.id)}
+                  userHasCV={!!user.cv_url}
+                />
+              ))
+            )}
           </div>
         </div>
       )}
@@ -247,9 +348,30 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
               <CardDescription>Track your application status</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                No applications yet. Browse jobs to get started!
-              </div>
+              {applications.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No applications yet. Browse jobs to get started!
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {applications.map((application) => (
+                    <div key={application.id} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold">{application.jobs?.title}</h3>
+                          <p className="text-sm text-muted-foreground">{application.jobs?.company_name}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Applied on {new Date(application.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Badge variant={application.status === 'pending' ? 'secondary' : 'default'}>
+                          {application.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -267,17 +389,17 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="job-title">Job Title</Label>
-                    <Input id="job-title" placeholder="Enter job title" required />
+                    <Input name="job-title" placeholder="Enter job title" required />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="company">Company</Label>
-                    <Input id="company" placeholder="Your company name" required />
+                    <Input name="company" placeholder="Your company name" required />
                   </div>
                 </div>
                 <div className="grid md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="location">Location</Label>
-                    <Select required>
+                    <Select name="location" required>
                       <SelectTrigger>
                         <SelectValue placeholder="Select location" />
                       </SelectTrigger>
@@ -292,7 +414,7 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="job-type">Job Type</Label>
-                    <Select required>
+                    <Select name="job-type" required>
                       <SelectTrigger>
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
@@ -305,13 +427,13 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="salary">Salary Range (ETB)</Label>
-                    <Input id="salary" placeholder="e.g., 15,000 - 25,000" required />
+                    <Input name="salary" placeholder="e.g., 15,000 - 25,000" required />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="description">Job Description</Label>
                   <Textarea
-                    id="description"
+                    name="description"
                     placeholder="Describe the role and responsibilities..."
                     className="min-h-[100px]"
                     required
@@ -320,15 +442,11 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
                 <div className="space-y-2">
                   <Label htmlFor="requirements">Requirements</Label>
                   <Textarea
-                    id="requirements"
+                    name="requirements"
                     placeholder="List the qualifications and skills required..."
                     className="min-h-[80px]"
                     required
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="deadline">Application Deadline</Label>
-                  <Input id="deadline" type="date" required />
                 </div>
                 <Button type="submit" className="w-full">
                   Post Job
@@ -345,9 +463,11 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
 interface JobCardProps {
   job: Job;
   onApply: (jobId: string) => void;
+  hasApplied: boolean;
+  userHasCV: boolean;
 }
 
-const JobCard = ({ job, onApply }: JobCardProps) => {
+const JobCard = ({ job, onApply, hasApplied, userHasCV }: JobCardProps) => {
   return (
     <Card className="card-hover">
       <CardHeader>
@@ -357,42 +477,44 @@ const JobCard = ({ job, onApply }: JobCardProps) => {
             <div className="flex items-center space-x-4 text-sm text-muted-foreground">
               <div className="flex items-center space-x-1">
                 <Building className="h-4 w-4" />
-                <span>{job.company}</span>
+                <span>{job.company_name || 'Company not specified'}</span>
               </div>
-              <div className="flex items-center space-x-1">
-                <MapPin className="h-4 w-4" />
-                <span>{job.location}</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <Clock className="h-4 w-4" />
-                <span>{job.type}</span>
-              </div>
+              {job.location && (
+                <div className="flex items-center space-x-1">
+                  <MapPin className="h-4 w-4" />
+                  <span>{job.location}</span>
+                </div>
+              )}
+              {job.job_type && (
+                <div className="flex items-center space-x-1">
+                  <Clock className="h-4 w-4" />
+                  <span>{job.job_type}</span>
+                </div>
+              )}
             </div>
           </div>
-          <Badge variant="secondary">{job.category}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <CardDescription className="line-clamp-3">{job.description}</CardDescription>
         
-        <div className="space-y-2">
-          <h4 className="font-semibold text-sm">Key Requirements:</h4>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            {job.requirements.slice(0, 2).map((req, index) => (
-              <li key={index} className="flex items-start space-x-2">
-                <span className="text-primary">•</span>
-                <span>{req}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {job.requirements && (
+          <div className="space-y-2">
+            <h4 className="font-semibold text-sm">Requirements:</h4>
+            <p className="text-sm text-muted-foreground">{job.requirements}</p>
+          </div>
+        )}
 
         <div className="flex justify-between items-center pt-4 border-t">
           <div className="text-lg font-semibold text-primary">
-            {job.salary}
+            {job.salary_range || 'Salary not specified'}
           </div>
-          <Button onClick={() => onApply(job.id)}>
-            Apply Now
+          <Button 
+            onClick={() => onApply(job.id)}
+            disabled={hasApplied}
+            variant={hasApplied ? "secondary" : "default"}
+          >
+            {hasApplied ? "Applied" : userHasCV ? "Apply Now" : "Upload CV to Apply"}
           </Button>
         </div>
       </CardContent>
