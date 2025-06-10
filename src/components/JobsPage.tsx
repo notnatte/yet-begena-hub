@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,6 +120,7 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
           description: formData.get('description') as string,
           requirements: formData.get('requirements') as string,
           posted_by: user.id,
+          is_active: true // Jobs are immediately active
         });
 
       if (error) throw error;
@@ -129,7 +131,7 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
       });
       
       setIsPostJobOpen(false);
-      fetchJobs(); // Refresh the jobs list
+      fetchJobs();
       (e.target as HTMLFormElement).reset();
     } catch (error) {
       console.error('Error posting job:', error);
@@ -176,7 +178,7 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
         description: "Your job application has been sent to the employer.",
       });
 
-      fetchApplications(); // Refresh applications
+      fetchApplications();
     } catch (error) {
       console.error('Error applying for job:', error);
       toast({
@@ -240,14 +242,12 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
         >
           Applied Jobs ({applications.length})
         </Button>
-        {user.role === "employer" && (
-          <Button
-            variant={activeTab === "post-job" ? "default" : "ghost"}
-            onClick={() => setActiveTab("post-job")}
-          >
-            Post a Job
-          </Button>
-        )}
+        <Button
+          variant={activeTab === "post-job" ? "default" : "ghost"}
+          onClick={() => setActiveTab("post-job")}
+        >
+          Post a Job
+        </Button>
       </div>
 
       {/* CV Upload Dialog */}
@@ -322,7 +322,7 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
             {filteredJobs.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
-                  No jobs found. {user.role === "employer" && "Be the first to post a job!"}
+                  No jobs found. Be the first to post a job!
                 </CardContent>
               </Card>
             ) : (
@@ -377,12 +377,12 @@ const JobsPage = ({ user, onBack }: JobsPageProps) => {
         </div>
       )}
 
-      {activeTab === "post-job" && user.role === "employer" && (
+      {activeTab === "post-job" && (
         <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Post a New Job</CardTitle>
-              <CardDescription>Find the right candidates for your organization</CardDescription>
+              <CardDescription>Find the right candidates for your organization - your job will be live immediately!</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handlePostJob} className="space-y-4">

@@ -76,6 +76,7 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
 
   const fetchMyCourses = async () => {
     try {
+      // Auto-verify purchases since admin verification is removed
       const { data, error } = await supabase
         .from('purchases')
         .select(`
@@ -92,7 +93,6 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
           )
         `)
         .eq('user_id', user.id)
-        .eq('is_verified', true)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -142,7 +142,7 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
         pdfUrl = fileName;
       }
 
-      // Create course
+      // Create course - user can post directly without admin approval
       const { error } = await supabase
         .from('courses')
         .insert({
@@ -154,6 +154,7 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
           duration: formData.get('duration') as string,
           instructor_id: user.id,
           pdf_url: pdfUrl,
+          is_active: true // Immediately active without approval
         });
 
       if (error) throw error;
@@ -163,7 +164,7 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
         description: "Your course is now live and visible to students.",
       });
       
-      fetchCourses(); // Refresh the courses list
+      fetchCourses();
       (e.target as HTMLFormElement).reset();
     } catch (error) {
       console.error('Error creating course:', error);
@@ -212,14 +213,12 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
         >
           My Courses ({myCourses.length})
         </Button>
-        {user.role === "instructor" && (
-          <Button
-            variant={activeTab === "add-course" ? "default" : "ghost"}
-            onClick={() => setActiveTab("add-course")}
-          >
-            Add Course
-          </Button>
-        )}
+        <Button
+          variant={activeTab === "add-course" ? "default" : "ghost"}
+          onClick={() => setActiveTab("add-course")}
+        >
+          Add Course
+        </Button>
       </div>
 
       {/* Content based on active tab */}
@@ -274,7 +273,7 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
               <div className="col-span-full">
                 <Card>
                   <CardContent className="py-8 text-center text-muted-foreground">
-                    No courses found. {user.role === "instructor" && "Be the first to create a course!"}
+                    No courses found. Be the first to create a course!
                   </CardContent>
                 </Card>
               </div>
@@ -337,12 +336,12 @@ const CoursesPage = ({ user, onBack }: CoursesPageProps) => {
         </div>
       )}
 
-      {activeTab === "add-course" && user.role === "instructor" && (
+      {activeTab === "add-course" && (
         <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Add New Course</CardTitle>
-              <CardDescription>Share your knowledge with the community</CardDescription>
+              <CardDescription>Share your knowledge with the community - your course will be live immediately!</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleAddCourse} className="space-y-4">

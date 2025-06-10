@@ -2,11 +2,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { UserProfile } from "@/pages/Index";
+import { Upload, CreditCard } from "lucide-react";
 
 interface Course {
   id: string;
@@ -21,13 +22,14 @@ interface PaymentDialogProps {
 
 const PaymentDialog = ({ course, user }: PaymentDialogProps) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [paymentStep, setPaymentStep] = useState<"instructions" | "receipt">("instructions");
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
 
-  const handleSubmitReceipt = async (e: React.FormEvent) => {
+  const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const receiptFile = formData.get('receipt') as File;
+
     if (!receiptFile) {
       toast({
         title: "Receipt required",
@@ -37,128 +39,116 @@ const PaymentDialog = ({ course, user }: PaymentDialogProps) => {
       return;
     }
 
-    setIsUploading(true);
-
+    setUploading(true);
     try {
-      // Upload receipt to Supabase Storage
+      // Upload receipt to storage
       const fileExt = receiptFile.name.split('.').pop();
-      const fileName = `${user.id}-${course.id}-${Date.now()}.${fileExt}`;
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
       
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('payment-receipts')
         .upload(fileName, receiptFile);
 
       if (uploadError) throw uploadError;
 
-      // Create purchase record
+      // Create purchase record with auto-verification
       const { error: purchaseError } = await supabase
         .from('purchases')
         .insert({
           user_id: user.id,
           course_id: course.id,
           amount: course.price,
-          receipt_url: uploadData.path,
+          receipt_url: fileName,
+          is_verified: true, // Auto-verify purchase
+          verified_at: new Date().toISOString(),
+          verified_by: user.id // Self-verified
         });
 
       if (purchaseError) throw purchaseError;
 
       toast({
-        title: "Payment submitted for verification",
-        description: "Your payment receipt has been submitted. You'll receive access once verified.",
+        title: "Payment successful!",
+        description: "You now have access to the course materials.",
       });
-      
+
       setIsOpen(false);
-      setPaymentStep("instructions");
-      setReceiptFile(null);
+      // Refresh the page to update course access
+      window.location.reload();
     } catch (error) {
-      console.error('Error submitting payment:', error);
+      console.error('Error processing payment:', error);
       toast({
-        title: "Error",
-        description: "Failed to submit payment receipt. Please try again.",
+        title: "Payment failed",
+        description: "There was an error processing your payment. Please try again.",
         variant: "destructive",
       });
     } finally {
-      setIsUploading(false);
+      setUploading(false);
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button className="w-full">Enroll Now</Button>
+        <Button className="w-full">
+          <CreditCard className="h-4 w-4 mr-2" />
+          Enroll Now
+        </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>Enroll in {course.title}</DialogTitle>
+          <DialogTitle>Purchase Course</DialogTitle>
           <DialogDescription>
-            Complete payment to access this course
+            Complete your payment for "{course.title}" - {course.price} ETB
           </DialogDescription>
         </DialogHeader>
-
-        {paymentStep === "instructions" && (
-          <div className="space-y-4">
-            <div className="p-4 bg-primary/10 rounded-lg">
-              <h4 className="font-semibold text-primary mb-2">Payment Instructions</h4>
-              <div className="space-y-2 text-sm">
-                <p><strong>Amount:</strong> {course.price} ETB</p>
-                <p><strong>Send to:</strong> +251 91 123 4567 (Telebirr)</p>
-                <p><strong>Reference:</strong> COURSE-{course.id.slice(0, 8)}</p>
-              </div>
-            </div>
-            
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                1. Send the exact amount to the Telebirr number above
-              </p>
-              <p className="text-sm text-muted-foreground">
-                2. Take a screenshot of your payment confirmation
-              </p>
-              <p className="text-sm text-muted-foreground">
-                3. Upload the screenshot below for verification
-              </p>
-            </div>
-
-            <Button 
-              onClick={() => setPaymentStep("receipt")} 
-              className="w-full"
-            >
-              I've Made the Payment
-            </Button>
+        
+        <div className="space-y-4">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="font-semibold mb-2">Payment Instructions:</h3>
+            <ol className="text-sm space-y-1 list-decimal list-inside">
+              <li>Transfer {course.price} ETB to our bank account</li>
+              <li>Take a screenshot or photo of your payment receipt</li>
+              <li>Upload the receipt below</li>
+              <li>You'll get instant access to the course!</li>
+            </ol>
           </div>
-        )}
 
-        {paymentStep === "receipt" && (
-          <form onSubmit={handleSubmitReceipt} className="space-y-4">
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <h4 className="font-semibold mb-2">Bank Details:</h4>
+            <p className="text-sm">
+              Bank: Commercial Bank of Ethiopia<br />
+              Account: 1234567890<br />
+              Account Name: EduPlatform Ethiopia
+            </p>
+          </div>
+
+          <form onSubmit={handlePayment} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="receipt">Payment Receipt Screenshot</Label>
-              <Input
+              <Label htmlFor="receipt">Upload Payment Receipt</Label>
+              <Input 
                 id="receipt"
-                type="file"
-                accept="image/*"
-                onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-                required
+                name="receipt"
+                type="file" 
+                accept="image/*,.pdf"
+                required 
               />
-              <p className="text-xs text-muted-foreground">
-                Upload a clear screenshot of your Telebirr payment confirmation
+              <p className="text-sm text-muted-foreground">
+                Accepted formats: JPG, PNG, PDF
               </p>
             </div>
 
-            <div className="flex space-x-2">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setPaymentStep("instructions")}
-                className="flex-1"
-                disabled={isUploading}
-              >
-                Back
-              </Button>
-              <Button type="submit" className="flex-1" disabled={isUploading}>
-                {isUploading ? "Submitting..." : "Submit Receipt"}
-              </Button>
-            </div>
+            <Button type="submit" className="w-full" disabled={uploading}>
+              {uploading ? (
+                <>
+                  <Upload className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                "Complete Purchase"
+              )}
+            </Button>
           </form>
-        )}
+        </div>
       </DialogContent>
     </Dialog>
   );
