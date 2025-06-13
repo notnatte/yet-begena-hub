@@ -1,73 +1,80 @@
-# Welcome to your Lovable project
+Project Overview
+This repository contains the source code for LearnWise, a modern, responsive learning platform built with the latest web technologies. It supports interactive lessons, progress tracking, gamification features, and a smooth user experience across devices.
 
-## Project info
+Getting Started
+You can edit this project using your preferred workflow. Below are several ways to get started:
 
-**URL**: https://lovable.dev/projects/b863ef57-aef2-42f1-b810-7068d78dcbf9
+1. Clone and Run Locally
+To develop locally using your own IDE:
 
-## How can I edit this code?
+Prerequisites
+Node.js & npm installed (Node v16+ recommended)
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/b863ef57-aef2-42f1-b810-7068d78dcbf9) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+Steps:
+sh
+Copy
+Edit
+# Step 1: Clone the repository using your Git URL
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
+# Step 2: Navigate into the project directory
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Step 3: Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Step 4: Start the development server
 npm run dev
-```
+This will launch a local development server with hot-reloading and a preview of the app.
 
-**Edit a file directly in GitHub**
+2. Edit Directly in GitHub
+You can also edit files directly on GitHub:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Open any file within the repository
 
-**Use GitHub Codespaces**
+Click the pencil ✏️ icon at the top-right
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Make your changes and commit
 
-## What technologies are used for this project?
+3. Use GitHub Codespaces (Optional)
+If enabled for your account:
 
+Click the green Code button at the top of the repo
+
+Open the Codespaces tab
+
+Click New codespace to launch a cloud-based development environment
+
+Technologies Used
 This project is built with:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Vite
 
-## How can I deploy this project?
+React
 
-Simply open [Lovable](https://lovable.dev/projects/b863ef57-aef2-42f1-b810-7068d78dcbf9) and click on Share -> Publish.
+TypeScript
 
-## Can I connect a custom domain to my Lovable project?
+Tailwind CSS
 
-Yes, you can!
+shadcn/ui
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Deployment
+To deploy this project, you can:
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+Build the production files using:
+
+sh
+Copy
+Edit
+npm run build
+Upload the contents of the dist folder to your preferred hosting platform (e.g., Vercel, Netlify, Firebase Hosting, etc.)
+
+Custom Domain Setup
+If using a custom deployment platform that supports domain mapping:
+
+Go to your domain registrar settings
+
+Add a CNAME or A record pointing to your hosting platform
+
+Follow the specific provider’s guide for domain configuration
+
